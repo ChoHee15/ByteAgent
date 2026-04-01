@@ -2,6 +2,11 @@
 
 `code-agent` 是一个基于 Go 和 [CloudWeGo Eino](https://github.com/cloudwego/eino) 的命令行 code agent。它支持单次提问和交互式 REPL，并可通过大模型调用本地 `bash` 工具完成查询或代码修改。
 
+## ???
+
+面试后尝试构建该项目，完成了基础功能。使用deepseek-chat进行了测试，可以完成代码编写、阅读查错。大规模代码未经过测试。
+
+
 ## 项目情况
 
 - 使用 Go 构建的 CLI 工具
