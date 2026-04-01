@@ -9,6 +9,8 @@
 文件：[`../.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 
 - 触发条件：向 `main` 发起 Pull Request
+- 仅当代码或构建相关文件发生变化时自动触发
+- `README.md`、`docs/**`、`CHANGELOG.md`、`TODO.md` 这类纯文档更新默认不会触发
 - 执行内容：`make test`
 
 ### Release
@@ -16,6 +18,7 @@
 文件：[`../.github/workflows/release.yml`](../.github/workflows/release.yml)
 
 - 触发条件：`main` 分支收到新的 push / merge
+- 仅当源码、依赖、`Makefile` 或 release workflow 本身发生变化时自动触发
 - 执行内容：
   - `make test`
   - `make test-integration`
@@ -55,6 +58,6 @@ OPENAI_BASE_URL=
 当前工作流监听的是 `main` 分支：
 
 - PR 到 `main` 会触发 `CI`
-- Push 到 `main` 会触发 `Release`
+- Push 到 `main` 且命中 release 路径过滤规则时会触发 `Release`
 
 如果仓库默认分支仍是 `master`，需要先完成分支切换，否则自动流程不会按预期触发。

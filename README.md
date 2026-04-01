@@ -5,6 +5,8 @@
 ## ???
 
 面试后尝试构建该项目，完成了基础功能。使用deepseek-chat进行了测试，可以完成代码编写、阅读查错。大规模代码未经过测试。
+该cli工具对其所处当前目录有效。可以使用release下的二进制包。
+进度记录于 [TODO.md](TODO.md) 和 [CHANGELOG.md](CHANGELOG.md) 下。
 
 
 ## 项目情况

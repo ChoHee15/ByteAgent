@@ -11,3 +11,4 @@
 - 增加 GitHub CI/CD 配置：Pull Request 到 `main` 自动执行 `make test`，`main` 分支 push 自动执行测试与集成验证，并发布 Linux `amd64` / `arm64` 二进制产物和 GitHub Release 资产。
 - 扩展发布流程的产物矩阵：在保留 Linux 测试/集成验证的前提下，额外发布 macOS `amd64` / `arm64` 二进制归档。
 - 重构 `README.md`：仅保留项目情况、API 设置、参数、源码启动、release 二进制使用和测试说明；将 GitHub Actions、Secrets 和发布流水线细节迁移到 `docs/github_actions.md`。
+- 优化 GitHub Actions 触发条件：纯文档修改默认不再触发 `CI` 或 `Release`；仅在源码、依赖、`Makefile` 或发布 workflow 相关文件变化时自动运行。

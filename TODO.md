@@ -9,3 +9,4 @@
 - [x] 为 GitHub 增加 CI/CD：main 分支自动测试、集成验证，并发布 Linux amd64/arm64 二进制
 - [x] 为发布流程增加 macOS 二进制产出支持（amd64 / arm64）
 - [x] 重构 README：仅保留项目介绍和使用说明，并将 GitHub Actions / 发布流水线细节迁移到 docs
+- [x] 优化 GitHub Actions 触发条件：纯文档更新默认不触发 CI/Release，仅在代码和构建相关变更时自动运行
