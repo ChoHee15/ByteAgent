@@ -51,6 +51,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        goos:
+          - linux
+          - darwin
         goarch:
           - amd64
           - arm64
@@ -66,7 +69,7 @@ jobs:
 
       - name: Build release archive
         env:
-          GOOS: linux
+          GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           VERSION: ${{ needs.verify.outputs.release_tag }}
           COMMIT: ${{ github.sha }}
@@ -75,8 +78,8 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: code-agent-linux-${{ matrix.goarch }}
-          path: dist/code-agent-linux-${{ matrix.goarch }}.tar.gz
+          name: code-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/code-agent-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
 
   publish:
     needs:
@@ -89,7 +92,7 @@ jobs:
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: code-agent-linux-*
+          pattern: code-agent-*
           path: dist
           merge-multiple: true
 

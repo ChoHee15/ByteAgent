@@ -7,3 +7,5 @@
 - [x] 为 code agent 增加写入前确认，拦截 bash 写入/修改命令并要求用户批准
 - [x] 调整写入拒绝语义：交互模式下用户拒绝写入时，仅终止当前 agent 任务并返回提示，不退出整个程序
 - [x] 为 GitHub 增加 CI/CD：main 分支自动测试、集成验证，并发布 Linux amd64/arm64 二进制
+- [x] 为发布流程增加 macOS 二进制产出支持（amd64 / arm64）
+- [x] 重构 README：仅保留项目介绍和使用说明，并将 GitHub Actions / 发布流水线细节迁移到 docs

@@ -1,42 +1,116 @@
 # code agent
 
-一个轻量的 Go CLI code agent，基于 [CloudWeGo Eino](https://github.com/cloudwego/eino) 构建，支持通过大模型自主调用本地 `bash` 工具。
+`code-agent` 是一个基于 Go 和 [CloudWeGo Eino](https://github.com/cloudwego/eino) 的命令行 code agent。它支持单次提问和交互式 REPL，并可通过大模型调用本地 `bash` 工具完成查询或代码修改。
 
-## 功能
+## 项目情况
 
-- 命令行单次提问
-- 交互式 REPL
-- 基于 Eino ADK 的 `ChatModelAgent`
-- 本地 `bash` 工具执行，默认限制在当前工作区内
+- 使用 Go 构建的 CLI 工具
+- 基于 Eino ADK 组装 `ChatModelAgent`
+- 支持本地 `bash` 工具调用
+- 默认在当前 workspace 内解析工作目录
+- 检测到潜在写入/修改命令时，会要求用户确认后才执行
 
-## 环境变量
+更多仓库运维和发布流水线说明见 [`docs/github_actions.md`](docs/github_actions.md)。
+
+## API 设置
+
+运行前至少需要设置：
 
 ```bash
 export OPENAI_API_KEY=your_api_key
+```
+
+可选配置：
+
+```bash
 export OPENAI_MODEL=gpt-4o-mini
-# 可选
 export OPENAI_BASE_URL=
 ```
 
-## 运行
+说明：
 
-```bash
-go run ./cmd/code-agent -- "帮我查看当前目录下有哪些文件"
-```
+- `OPENAI_API_KEY`：必填
+- `OPENAI_MODEL`：可选，默认 `gpt-4o-mini`
+- `OPENAI_BASE_URL`：可选，使用兼容 OpenAI 接口的代理或服务时填写
 
-或者：
+## 参数与行为
 
-```bash
-code-agent -i
-```
+命令行参数：
 
-## 可调参数
+- `-i`：启动交互模式
+- `-h`：显示帮助
+
+可选环境变量：
 
 ```bash
 export CODE_AGENT_MAX_HISTORY_TURNS=8
 export CODE_AGENT_COMMAND_TIMEOUT_SEC=120
 export CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES=32768
 ```
+
+说明：
+
+- `CODE_AGENT_MAX_HISTORY_TURNS`：交互模式下保留的历史轮数
+- `CODE_AGENT_COMMAND_TIMEOUT_SEC`：单条 `bash` 命令超时时间
+- `CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES`：单条 `bash` 输出的最大保留字节数
+
+交互说明：
+
+- 等待模型响应时，终端会显示加载提示
+- 当 agent 尝试执行可能写入或修改文件的 `bash` 命令时，会要求用户确认
+- 在交互模式中拒绝写入，只会取消当前任务，不会退出整个 REPL
+
+## 源码启动
+
+单次提问：
+
+```bash
+go run ./cmd/code-agent -- "帮我查看当前目录下有哪些文件"
+```
+
+从标准输入读取提示词：
+
+```bash
+echo "列出当前目录文件并总结用途" | go run ./cmd/code-agent
+```
+
+交互模式：
+
+```bash
+go run ./cmd/code-agent -- -i
+```
+
+也可以先编译后再运行：
+
+```bash
+go build -o ./dist/code-agent ./cmd/code-agent
+./dist/code-agent -i
+```
+
+## Release 二进制使用
+
+仓库发布产物为压缩包，当前包含：
+
+- `linux/amd64`
+- `linux/arm64`
+- `darwin/amd64`
+- `darwin/arm64`
+
+下载并解压后即可直接运行，例如 Linux amd64：
+
+```bash
+tar -xzf code-agent-linux-amd64.tar.gz
+./code-agent-linux-amd64 -- "检查当前目录"
+```
+
+macOS arm64 示例：
+
+```bash
+tar -xzf code-agent-darwin-arm64.tar.gz
+./code-agent-darwin-arm64 -i
+```
+
+二进制运行前同样需要先设置 `OPENAI_API_KEY` 等环境变量。
 
 ## 测试
 
@@ -46,53 +120,26 @@ export CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES=32768
 make test
 ```
 
-如果只想执行默认分层中的单元测试与本地集成测试，也可以直接运行：
+如果只想运行默认分层中的单元测试与本地集成测试：
 
 ```bash
 make test-unit
 ```
 
-真实模型连通性验证放在独立 smoke test 层，只有在显式提供 API 配置时才应运行：
+真实模型相关验证放在独立 integration 层，仅在显式提供 API 配置时运行：
 
 ```bash
 export OPENAI_API_KEY=your_api_key
 make test-integration
 ```
 
-`make test-integration` 当前包含两类真实链路验证：
+`make test-integration` 当前包含：
 
-- 模型接入 smoke test：验证 OpenAI/Eino 模型初始化与最小 `Generate()` 调用成功
-- code agent 链路测试：验证完整 `agent + bash tool + runner` 能在临时工作区内读取文件并生成包含文件名与内容的回答
+- OpenAI/Eino 模型接入 smoke test
+- 真实 `code agent + bash tool + runner` 链路测试
 
-需要完整验证两层测试时再运行：
+完整执行两层测试：
 
 ```bash
 make test-all
 ```
-
-## GitHub CI/CD
-
-仓库提供两条 GitHub Actions 工作流：
-
-- `CI`
-  - 触发条件：向 `main` 发起 Pull Request
-  - 执行内容：`make test`
-- `Release`
-  - 触发条件：`main` 分支收到新的 push / merge
-  - 执行内容：`make test`、`make test-integration`
-  - 成功后发布 Linux 二进制产物：
-    - `linux/amd64`
-    - `linux/arm64`
-  - 产物会同时上传为 workflow artifact，并作为 GitHub Release asset 发布
-
-在 GitHub 仓库中需要配置以下 Actions secrets：
-
-```bash
-OPENAI_API_KEY=...
-# 可选；未设置时默认使用 gpt-4o-mini
-OPENAI_MODEL=gpt-4o-mini
-# 可选；使用兼容接口时可填写自定义地址
-OPENAI_BASE_URL=
-```
-
-当前本地仓库默认分支仍是 `master`。如果你要让上述工作流按设计自动在 `main` 上触发，需要在 GitHub 上将默认分支切换为 `main`，或先将本地/远端分支重命名为 `main`。
