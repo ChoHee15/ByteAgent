@@ -21,15 +21,29 @@ import (
 	localtool "code_agent/internal/tool"
 )
 
+type queryRunner interface {
+	Query(ctx context.Context, query string, opts ...adk.AgentRunOption) *adk.AsyncIterator[*adk.AgentEvent]
+}
+
+type bootstrapFunc func(context.Context) (*config.Config, queryRunner, error)
+
 // App is the CLI application.
 type App struct {
 	cfg    *config.Config
-	runner *adk.Runner
+	runner queryRunner
+
+	stdin     *os.File
+	stdout    io.Writer
+	bootstrap bootstrapFunc
 }
 
 // New creates the CLI application.
 func New() (*App, error) {
-	return &App{}, nil
+	return &App{
+		stdin:     os.Stdin,
+		stdout:    os.Stdout,
+		bootstrap: defaultBootstrap,
+	}, nil
 }
 
 // Run executes the CLI command.
@@ -67,7 +81,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	fmt.Println(answer)
+	fmt.Fprintln(a.outputWriter(), answer)
 	return nil
 }
 
@@ -76,7 +90,7 @@ func (a *App) resolvePrompt(args []string) (string, error) {
 		return strings.TrimSpace(strings.Join(args, " ")), nil
 	}
 
-	info, err := os.Stdin.Stat()
+	info, err := a.inputFile().Stat()
 	if err != nil {
 		return "", fmt.Errorf("inspect stdin: %w", err)
 	}
@@ -85,7 +99,7 @@ func (a *App) resolvePrompt(args []string) (string, error) {
 		return "", nil
 	}
 
-	data, err := io.ReadAll(os.Stdin)
+	data, err := io.ReadAll(a.inputFile())
 	if err != nil {
 		return "", fmt.Errorf("read stdin: %w", err)
 	}
@@ -98,52 +112,36 @@ func (a *App) initialize(ctx context.Context) error {
 		return nil
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return err
+	bootstrap := a.bootstrap
+	if bootstrap == nil {
+		bootstrap = defaultBootstrap
 	}
 
-	model, err := openaimodel.NewOpenAI(ctx, cfg)
-	if err != nil {
-		return err
-	}
-
-	bashTool, err := localtool.NewBashTool(
-		cfg.WorkspaceDir,
-		time.Duration(cfg.CommandTimeoutSec)*time.Second,
-		cfg.MaxCommandBytes,
-	)
-	if err != nil {
-		return err
-	}
-
-	codeAgent, err := agent.New(ctx, model, []einotool.BaseTool{bashTool})
+	cfg, runner, err := bootstrap(ctx)
 	if err != nil {
 		return err
 	}
 
 	a.cfg = cfg
-	a.runner = adk.NewRunner(ctx, adk.RunnerConfig{
-		Agent: codeAgent,
-	})
+	a.runner = runner
 
 	return nil
 }
 
 func (a *App) runInteractive(ctx context.Context) error {
-	fmt.Printf("workspace: %s\n", a.cfg.WorkspaceDir)
-	fmt.Println("interactive mode. type 'exit' or 'quit' to leave.")
+	fmt.Fprintf(a.outputWriter(), "workspace: %s\n", a.cfg.WorkspaceDir)
+	fmt.Fprintln(a.outputWriter(), "interactive mode. type 'exit' or 'quit' to leave.")
 
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(a.inputFile())
 	history := make([]turn, 0, a.cfg.MaxHistoryTurns)
 
 	for {
-		fmt.Print("> ")
+		fmt.Fprint(a.outputWriter(), "> ")
 		if !scanner.Scan() {
 			if err := scanner.Err(); err != nil {
 				return fmt.Errorf("read input: %w", err)
 			}
-			fmt.Println()
+			fmt.Fprintln(a.outputWriter())
 			return nil
 		}
 
@@ -161,7 +159,7 @@ func (a *App) runInteractive(ctx context.Context) error {
 			return err
 		}
 
-		fmt.Println(answer)
+		fmt.Fprintln(a.outputWriter(), answer)
 		history = append(history, turn{User: input, Assistant: answer})
 		if len(history) > a.cfg.MaxHistoryTurns {
 			history = history[len(history)-a.cfg.MaxHistoryTurns:]
@@ -207,7 +205,7 @@ func (a *App) usageError(err error) error {
 }
 
 func (a *App) printUsage() {
-	fmt.Println(`Usage:
+	fmt.Fprintln(a.outputWriter(), `Usage:
   code-agent [options] <prompt>
   echo "your prompt" | code-agent
   code-agent -i
@@ -247,4 +245,50 @@ func withHistory(history []turn, input string) string {
 	b.WriteString("\nCurrent user request:\n")
 	b.WriteString(input)
 	return b.String()
+}
+
+func defaultBootstrap(ctx context.Context) (*config.Config, queryRunner, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	model, err := openaimodel.NewOpenAI(ctx, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	bashTool, err := localtool.NewBashTool(
+		cfg.WorkspaceDir,
+		time.Duration(cfg.CommandTimeoutSec)*time.Second,
+		cfg.MaxCommandBytes,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	codeAgent, err := agent.New(ctx, model, []einotool.BaseTool{bashTool})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return cfg, adk.NewRunner(ctx, adk.RunnerConfig{
+		Agent: codeAgent,
+	}), nil
+}
+
+func (a *App) inputFile() *os.File {
+	if a.stdin != nil {
+		return a.stdin
+	}
+
+	return os.Stdin
+}
+
+func (a *App) outputWriter() io.Writer {
+	if a.stdout != nil {
+		return a.stdout
+	}
+
+	return os.Stdout
 }

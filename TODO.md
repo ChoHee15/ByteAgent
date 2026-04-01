@@ -1,0 +1,5 @@
+- [x] 实现测试
+- [x] 为 `internal/app`、`internal/tool`、`internal/config` 增加默认 mock/local tests
+- [x] 为大模型接入增加可选 integration smoke test
+- [x] 统一 `Makefile`、`README.md`、`AGENTS.MD`、`docs/prompts/generate_test.md` 的测试分层说明
+- [x] 增加提交约束：功能验证成功后，需经用户确认再创建 commit，并使用 GitHub 社区常见的提交说明格式
