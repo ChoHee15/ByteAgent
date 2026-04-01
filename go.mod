@@ -3,6 +3,7 @@ module code_agent
 go 1.24.3
 
 require (
+	github.com/chzyer/readline v1.5.1
 	github.com/cloudwego/eino v0.8.6
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.11
 )

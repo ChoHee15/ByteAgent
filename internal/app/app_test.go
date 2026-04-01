@@ -236,14 +236,18 @@ func TestRun(t *testing.T) {
 		t.Parallel()
 
 		var output bytes.Buffer
+		editor := &fakeLineEditor{inputs: []fakeLineResult{{line: "exit"}}}
 		application := &App{
 			cfg: &config.Config{
 				WorkspaceDir:    "/tmp/workspace",
 				MaxHistoryTurns: 4,
 			},
 			runner: &fakeRunner{},
-			stdin:  newInputFile(t, "exit\n"),
+			stdin:  newInputFile(t, ""),
 			stdout: &output,
+			lineEditorFactory: func() (lineEditor, error) {
+				return editor, nil
+			},
 		}
 
 		if err := application.Run(context.Background(), []string{"-i"}); err != nil {
@@ -254,8 +258,8 @@ func TestRun(t *testing.T) {
 		if !strings.Contains(rendered, "interactive mode") {
 			t.Fatalf("Run() output = %q, want interactive banner", rendered)
 		}
-		if !strings.Contains(rendered, "> ") {
-			t.Fatalf("Run() output = %q, want prompt marker", rendered)
+		if len(editor.prompts) == 0 || editor.prompts[0] != "> " {
+			t.Fatalf("line editor prompts = %v, want first prompt %q", editor.prompts, "> ")
 		}
 	})
 
@@ -360,6 +364,35 @@ func TestConfirmMutatingCommand(t *testing.T) {
 	}
 }
 
+func TestConfirmMutatingCommandWithLineEditor(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	editor := &fakeLineEditor{inputs: []fakeLineResult{{line: "yes"}}}
+	application := &App{
+		stdout: &output,
+		lineEditorFactory: func() (lineEditor, error) {
+			return nil, nil
+		},
+		activeEditor:  editor,
+		forceApproval: true,
+	}
+
+	approved, err := application.confirmMutatingCommand(context.Background(), localtool.ApprovalRequest{
+		Command:          "touch demo.txt",
+		WorkingDirectory: "/tmp/workspace",
+	})
+	if err != nil {
+		t.Fatalf("confirmMutatingCommand() error = %v", err)
+	}
+	if !approved {
+		t.Fatal("confirmMutatingCommand() = false, want true")
+	}
+	if len(editor.prompts) == 0 || editor.prompts[len(editor.prompts)-1] != "Proceed? [y/N]: " {
+		t.Fatalf("line editor prompts = %v, want approval prompt", editor.prompts)
+	}
+}
+
 func TestHandleInteractiveError(t *testing.T) {
 	t.Parallel()
 
@@ -419,6 +452,36 @@ type fakeProgressIndicator struct {
 	mu         sync.Mutex
 	startCount int
 	stopCount  int
+}
+
+type fakeLineResult struct {
+	line string
+	err  error
+}
+
+type fakeLineEditor struct {
+	prompts []string
+	inputs  []fakeLineResult
+	closed  bool
+}
+
+func (f *fakeLineEditor) Readline() (string, error) {
+	if len(f.inputs) == 0 {
+		return "", io.EOF
+	}
+
+	result := f.inputs[0]
+	f.inputs = f.inputs[1:]
+	return result.line, result.err
+}
+
+func (f *fakeLineEditor) SetPrompt(prompt string) {
+	f.prompts = append(f.prompts, prompt)
+}
+
+func (f *fakeLineEditor) Close() error {
+	f.closed = true
+	return nil
 }
 
 func (f *fakeProgressIndicator) Start() {

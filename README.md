@@ -65,6 +65,7 @@ export CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES=32768
 
 交互说明：
 
+- 交互式 REPL 现在基于 `readline`，对中文输入、退格和行编辑更友好
 - 等待模型响应时，终端会显示加载提示
 - 当 agent 尝试执行可能写入或修改文件的 `bash` 命令时，会要求用户确认
 - 在交互模式中拒绝写入，只会取消当前任务，不会退出整个 REPL

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chzyer/readline"
 	"github.com/cloudwego/eino/adk"
 	einotool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -31,10 +32,17 @@ type queryRunner interface {
 type bootstrapFunc func(context.Context) (*config.Config, queryRunner, error)
 
 type spinnerFactory func(io.Writer) progressIndicator
+type lineEditorFactory func() (lineEditor, error)
 
 type progressIndicator interface {
 	Start()
 	Stop()
+}
+
+type lineEditor interface {
+	Readline() (string, error)
+	SetPrompt(string)
+	Close() error
 }
 
 // App is the CLI application.
@@ -46,12 +54,14 @@ type App struct {
 	stdout    io.Writer
 	bootstrap bootstrapFunc
 
-	progressFactory spinnerFactory
-	forceProgress   bool
-	forceApproval   bool
+	progressFactory   spinnerFactory
+	lineEditorFactory lineEditorFactory
+	forceProgress     bool
+	forceApproval     bool
 
 	progressMu     sync.Mutex
 	activeProgress progressIndicator
+	activeEditor   lineEditor
 }
 
 // New creates the CLI application.
@@ -154,20 +164,27 @@ func (a *App) runInteractive(ctx context.Context) error {
 	fmt.Fprintf(a.outputWriter(), "workspace: %s\n", a.cfg.WorkspaceDir)
 	fmt.Fprintln(a.outputWriter(), "interactive mode. type 'exit' or 'quit' to leave.")
 
-	scanner := bufio.NewScanner(a.inputFile())
+	editor, err := a.newLineEditor()
+	if err != nil {
+		return err
+	}
+	if editor != nil {
+		defer func() { _ = editor.Close() }()
+	}
+
 	history := make([]turn, 0, a.cfg.MaxHistoryTurns)
+	a.activeEditor = editor
+	defer func() { a.activeEditor = nil }()
 
 	for {
-		fmt.Fprint(a.outputWriter(), "> ")
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				return fmt.Errorf("read input: %w", err)
+		input, err := a.readInteractiveInput("> ")
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Fprintln(a.outputWriter())
+				return nil
 			}
-			fmt.Fprintln(a.outputWriter())
-			return nil
+			return err
 		}
-
-		input := strings.TrimSpace(scanner.Text())
 		if input == "" {
 			continue
 		}
@@ -315,12 +332,89 @@ func (a *App) inputFile() *os.File {
 	return os.Stdin
 }
 
+func (a *App) newLineEditor() (lineEditor, error) {
+	if a.lineEditorFactory != nil {
+		editor, err := a.lineEditorFactory()
+		if err != nil {
+			return nil, fmt.Errorf("create line editor: %w", err)
+		}
+
+		return editor, nil
+	}
+	if !a.canUseLineEditor() {
+		return nil, nil
+	}
+
+	editor, err := a.newDefaultLineEditor()
+	if err != nil {
+		return nil, fmt.Errorf("create line editor: %w", err)
+	}
+
+	return editor, nil
+}
+
+func (a *App) newDefaultLineEditor() (lineEditor, error) {
+	outputFile, ok := a.outputWriter().(*os.File)
+	if !ok {
+		return nil, nil
+	}
+
+	instance, err := readline.NewEx(&readline.Config{
+		Prompt:                 "> ",
+		Stdin:                  a.inputFile(),
+		Stdout:                 outputFile,
+		Stderr:                 outputFile,
+		HistoryLimit:           256,
+		DisableAutoSaveHistory: true,
+		InterruptPrompt:        "^C",
+		EOFPrompt:              "exit",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &readlineEditor{instance: instance}, nil
+}
+
 func (a *App) outputWriter() io.Writer {
 	if a.stdout != nil {
 		return a.stdout
 	}
 
 	return os.Stdout
+}
+
+func (a *App) readInteractiveInput(prompt string) (string, error) {
+	if a.activeEditor != nil {
+		for {
+			a.activeEditor.SetPrompt(prompt)
+			line, err := a.activeEditor.Readline()
+			if err == nil {
+				return strings.TrimSpace(line), nil
+			}
+			if errors.Is(err, readline.ErrInterrupt) {
+				fmt.Fprintln(a.outputWriter())
+				continue
+			}
+			if errors.Is(err, io.EOF) {
+				return "", io.EOF
+			}
+
+			return "", fmt.Errorf("read input: %w", err)
+		}
+	}
+
+	fmt.Fprint(a.outputWriter(), prompt)
+	reader := bufio.NewReader(a.inputFile())
+	line, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", fmt.Errorf("read input: %w", err)
+	}
+	if errors.Is(err, io.EOF) && strings.TrimSpace(line) == "" {
+		return "", io.EOF
+	}
+
+	return strings.TrimSpace(line), nil
 }
 
 func (a *App) newProgressIndicator() progressIndicator {
@@ -378,6 +472,28 @@ func (a *App) canPromptForApproval() bool {
 	return stdoutInfo.Mode()&os.ModeCharDevice != 0
 }
 
+func (a *App) canUseLineEditor() bool {
+	if a.forceApproval {
+		return true
+	}
+
+	stdinInfo, err := a.inputFile().Stat()
+	if err != nil || stdinInfo.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+
+	stdoutFile, ok := a.outputWriter().(*os.File)
+	if !ok {
+		return false
+	}
+	stdoutInfo, err := stdoutFile.Stat()
+	if err != nil {
+		return false
+	}
+
+	return stdoutInfo.Mode()&os.ModeCharDevice != 0
+}
+
 func (a *App) confirmMutatingCommand(ctx context.Context, request localtool.ApprovalRequest) (bool, error) {
 	_ = ctx
 
@@ -392,15 +508,15 @@ func (a *App) confirmMutatingCommand(ctx context.Context, request localtool.Appr
 	fmt.Fprintln(a.outputWriter(), "Command requires confirmation before modifying files:")
 	fmt.Fprintf(a.outputWriter(), "  working directory: %s\n", request.WorkingDirectory)
 	fmt.Fprintf(a.outputWriter(), "  command: %s\n", request.Command)
-	fmt.Fprint(a.outputWriter(), "Proceed? [y/N]: ")
-
-	reader := bufio.NewReader(a.inputFile())
-	answer, err := reader.ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
+	answer, err := a.readInteractiveInput("Proceed? [y/N]: ")
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
 		return false, fmt.Errorf("read approval input: %w", err)
 	}
 
-	switch strings.TrimSpace(strings.ToLower(answer)) {
+	switch strings.ToLower(answer) {
 	case "y", "yes":
 		return true, nil
 	default:
@@ -495,6 +611,22 @@ type spinner struct {
 	frames []string
 	mu     sync.Once
 	stopMu sync.Once
+}
+
+type readlineEditor struct {
+	instance *readline.Instance
+}
+
+func (r *readlineEditor) Readline() (string, error) {
+	return r.instance.Readline()
+}
+
+func (r *readlineEditor) SetPrompt(prompt string) {
+	r.instance.SetPrompt(prompt)
+}
+
+func (r *readlineEditor) Close() error {
+	return r.instance.Close()
 }
 
 func newSpinner(writer io.Writer, label string) progressIndicator {
