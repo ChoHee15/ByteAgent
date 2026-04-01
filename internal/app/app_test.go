@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 
 	"code_agent/internal/config"
+	localtool "code_agent/internal/tool"
 )
 
 func TestResolvePrompt(t *testing.T) {
@@ -203,6 +206,9 @@ func TestRun(t *testing.T) {
 		if got := strings.TrimSpace(output.String()); got != "done" {
 			t.Fatalf("Run() output = %q, want %q", got, "done")
 		}
+		if strings.Contains(output.String(), "agent running") {
+			t.Fatalf("Run() output = %q, did not expect spinner text for non-terminal output", output.String())
+		}
 		if len(runner.queries) != 1 || runner.queries[0] != "analyze repo" {
 			t.Fatalf("runner queries = %v, want single query %q", runner.queries, "analyze repo")
 		}
@@ -234,6 +240,130 @@ func TestRun(t *testing.T) {
 			t.Fatalf("Run() output = %q, want prompt marker", rendered)
 		}
 	})
+
+}
+
+func TestAskShowsProgressForTerminalOutput(t *testing.T) {
+	t.Parallel()
+
+	progress := &fakeProgressIndicator{}
+	application := &App{
+		runner: &fakeRunner{
+			events: [][]*adk.AgentEvent{
+				{
+					adk.EventFromMessage(schema.AssistantMessage("done", nil), nil, schema.Assistant, ""),
+				},
+			},
+		},
+		stdout: &bytes.Buffer{},
+		progressFactory: func(io.Writer) progressIndicator {
+			return progress
+		},
+		forceProgress: true,
+	}
+
+	answer, err := application.ask(context.Background(), "inspect")
+	if err != nil {
+		t.Fatalf("ask() error = %v", err)
+	}
+	if answer != "done" {
+		t.Fatalf("ask() = %q, want %q", answer, "done")
+	}
+	if progress.startCount != 1 {
+		t.Fatalf("progress start count = %d, want 1", progress.startCount)
+	}
+	if progress.stopCount != 1 {
+		t.Fatalf("progress stop count = %d, want 1", progress.stopCount)
+	}
+}
+
+func TestConfirmMutatingCommand(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		input       string
+		forcePrompt bool
+		want        bool
+		wantErr     string
+	}{
+		{
+			name:        "approves yes",
+			input:       "yes\n",
+			forcePrompt: true,
+			want:        true,
+		},
+		{
+			name:        "defaults to deny",
+			input:       "n\n",
+			forcePrompt: true,
+			want:        false,
+		},
+		{
+			name:    "requires interactive terminal",
+			input:   "yes\n",
+			wantErr: "interactive terminal",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var output bytes.Buffer
+			application := &App{
+				stdin:         newInputFile(t, tc.input),
+				stdout:        &output,
+				forceApproval: tc.forcePrompt,
+			}
+
+			approved, err := application.confirmMutatingCommand(context.Background(), localtool.ApprovalRequest{
+				Command:          "touch demo.txt",
+				WorkingDirectory: "/tmp/workspace",
+			})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("confirmMutatingCommand() error = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("confirmMutatingCommand() error = %v", err)
+			}
+			if approved != tc.want {
+				t.Fatalf("confirmMutatingCommand() = %v, want %v", approved, tc.want)
+			}
+			if !strings.Contains(output.String(), "Proceed? [y/N]: ") {
+				t.Fatalf("confirmMutatingCommand() output = %q, want approval prompt", output.String())
+			}
+		})
+	}
+}
+
+func TestHandleInteractiveError(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	application := &App{stdout: &output}
+
+	handled := application.handleInteractiveError(errors.Join(errors.New("tool failed"), localtool.ErrWriteNotApproved))
+	if !handled {
+		t.Fatal("handleInteractiveError() = false, want true")
+	}
+	if !strings.Contains(output.String(), "Write was not approved. Current task was canceled.") {
+		t.Fatalf("handleInteractiveError() output = %q, want rejection notice", output.String())
+	}
+
+	output.Reset()
+	handled = application.handleInteractiveError(errors.New("other error"))
+	if handled {
+		t.Fatal("handleInteractiveError() = true, want false")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("handleInteractiveError() wrote unexpected output: %q", output.String())
+	}
 }
 
 func TestWithHistory(t *testing.T) {
@@ -265,6 +395,24 @@ func TestWithHistory(t *testing.T) {
 type fakeRunner struct {
 	queries []string
 	events  [][]*adk.AgentEvent
+}
+
+type fakeProgressIndicator struct {
+	mu         sync.Mutex
+	startCount int
+	stopCount  int
+}
+
+func (f *fakeProgressIndicator) Start() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.startCount++
+}
+
+func (f *fakeProgressIndicator) Stop() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stopCount++
 }
 
 func (f *fakeRunner) Query(_ context.Context, query string, _ ...adk.AgentRunOption) *adk.AsyncIterator[*adk.AgentEvent] {

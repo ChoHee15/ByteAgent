@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/eino/adk"
@@ -27,6 +28,13 @@ type queryRunner interface {
 
 type bootstrapFunc func(context.Context) (*config.Config, queryRunner, error)
 
+type spinnerFactory func(io.Writer) progressIndicator
+
+type progressIndicator interface {
+	Start()
+	Stop()
+}
+
 // App is the CLI application.
 type App struct {
 	cfg    *config.Config
@@ -35,15 +43,27 @@ type App struct {
 	stdin     *os.File
 	stdout    io.Writer
 	bootstrap bootstrapFunc
+
+	progressFactory spinnerFactory
+	forceProgress   bool
+	forceApproval   bool
+
+	progressMu     sync.Mutex
+	activeProgress progressIndicator
 }
 
 // New creates the CLI application.
 func New() (*App, error) {
-	return &App{
-		stdin:     os.Stdin,
-		stdout:    os.Stdout,
-		bootstrap: defaultBootstrap,
-	}, nil
+	app := &App{
+		stdin:  os.Stdin,
+		stdout: os.Stdout,
+		progressFactory: func(w io.Writer) progressIndicator {
+			return newSpinner(w, "agent running")
+		},
+	}
+	app.bootstrap = app.defaultBootstrap
+
+	return app, nil
 }
 
 // Run executes the CLI command.
@@ -114,7 +134,7 @@ func (a *App) initialize(ctx context.Context) error {
 
 	bootstrap := a.bootstrap
 	if bootstrap == nil {
-		bootstrap = defaultBootstrap
+		bootstrap = a.defaultBootstrap
 	}
 
 	cfg, runner, err := bootstrap(ctx)
@@ -156,6 +176,9 @@ func (a *App) runInteractive(ctx context.Context) error {
 		prompt := withHistory(history, input)
 		answer, err := a.ask(ctx, prompt)
 		if err != nil {
+			if a.handleInteractiveError(err) {
+				continue
+			}
 			return err
 		}
 
@@ -168,6 +191,9 @@ func (a *App) runInteractive(ctx context.Context) error {
 }
 
 func (a *App) ask(ctx context.Context, prompt string) (string, error) {
+	a.startProgress()
+	defer a.stopProgress()
+
 	iter := a.runner.Query(ctx, prompt)
 
 	var lastAssistant string
@@ -247,7 +273,7 @@ func withHistory(history []turn, input string) string {
 	return b.String()
 }
 
-func defaultBootstrap(ctx context.Context) (*config.Config, queryRunner, error) {
+func (a *App) defaultBootstrap(ctx context.Context) (*config.Config, queryRunner, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, nil, err
@@ -262,6 +288,7 @@ func defaultBootstrap(ctx context.Context) (*config.Config, queryRunner, error) 
 		cfg.WorkspaceDir,
 		time.Duration(cfg.CommandTimeoutSec)*time.Second,
 		cfg.MaxCommandBytes,
+		localtool.WithWriteApproval(a.confirmMutatingCommand),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -291,4 +318,192 @@ func (a *App) outputWriter() io.Writer {
 	}
 
 	return os.Stdout
+}
+
+func (a *App) newProgressIndicator() progressIndicator {
+	if !a.shouldShowProgress() {
+		return nil
+	}
+
+	factory := a.progressFactory
+	if factory == nil {
+		factory = func(w io.Writer) progressIndicator {
+			return newSpinner(w, "agent running")
+		}
+	}
+
+	return factory(a.outputWriter())
+}
+
+func (a *App) shouldShowProgress() bool {
+	if a.forceProgress {
+		return true
+	}
+
+	outputFile, ok := a.outputWriter().(*os.File)
+	if !ok {
+		return false
+	}
+
+	info, err := outputFile.Stat()
+	if err != nil {
+		return false
+	}
+
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+func (a *App) canPromptForApproval() bool {
+	if a.forceApproval {
+		return true
+	}
+
+	stdinInfo, err := a.inputFile().Stat()
+	if err != nil || stdinInfo.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+
+	stdoutFile, ok := a.outputWriter().(*os.File)
+	if !ok {
+		return false
+	}
+	stdoutInfo, err := stdoutFile.Stat()
+	if err != nil {
+		return false
+	}
+
+	return stdoutInfo.Mode()&os.ModeCharDevice != 0
+}
+
+func (a *App) confirmMutatingCommand(ctx context.Context, request localtool.ApprovalRequest) (bool, error) {
+	_ = ctx
+
+	resume := a.pauseProgress()
+	defer a.resumeProgress(resume)
+
+	if !a.canPromptForApproval() {
+		return false, fmt.Errorf("mutating bash commands require confirmation from an interactive terminal")
+	}
+
+	fmt.Fprintln(a.outputWriter())
+	fmt.Fprintln(a.outputWriter(), "Command requires confirmation before modifying files:")
+	fmt.Fprintf(a.outputWriter(), "  working directory: %s\n", request.WorkingDirectory)
+	fmt.Fprintf(a.outputWriter(), "  command: %s\n", request.Command)
+	fmt.Fprint(a.outputWriter(), "Proceed? [y/N]: ")
+
+	reader := bufio.NewReader(a.inputFile())
+	answer, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, fmt.Errorf("read approval input: %w", err)
+	}
+
+	switch strings.TrimSpace(strings.ToLower(answer)) {
+	case "y", "yes":
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+func (a *App) handleInteractiveError(err error) bool {
+	if errors.Is(err, localtool.ErrWriteNotApproved) {
+		fmt.Fprintln(a.outputWriter(), "Write was not approved. Current task was canceled.")
+		return true
+	}
+
+	return false
+}
+
+func (a *App) startProgress() {
+	progress := a.newProgressIndicator()
+	if progress == nil {
+		return
+	}
+
+	a.progressMu.Lock()
+	a.activeProgress = progress
+	a.progressMu.Unlock()
+
+	progress.Start()
+}
+
+func (a *App) stopProgress() {
+	a.progressMu.Lock()
+	progress := a.activeProgress
+	a.activeProgress = nil
+	a.progressMu.Unlock()
+
+	if progress != nil {
+		progress.Stop()
+	}
+}
+
+func (a *App) pauseProgress() bool {
+	a.progressMu.Lock()
+	progress := a.activeProgress
+	a.activeProgress = nil
+	a.progressMu.Unlock()
+
+	if progress == nil {
+		return false
+	}
+
+	progress.Stop()
+	return true
+}
+
+func (a *App) resumeProgress(shouldResume bool) {
+	if shouldResume {
+		a.startProgress()
+	}
+}
+
+type spinner struct {
+	writer io.Writer
+	label  string
+	stopCh chan struct{}
+	doneCh chan struct{}
+	frames []string
+	mu     sync.Once
+	stopMu sync.Once
+}
+
+func newSpinner(writer io.Writer, label string) progressIndicator {
+	return &spinner{
+		writer: writer,
+		label:  label,
+		stopCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
+		frames: []string{"|", "/", "-", `\`},
+	}
+}
+
+func (s *spinner) Start() {
+	s.mu.Do(func() {
+		go func() {
+			ticker := time.NewTicker(120 * time.Millisecond)
+			defer ticker.Stop()
+			defer close(s.doneCh)
+
+			frameIndex := 0
+			for {
+				fmt.Fprintf(s.writer, "\r%s %s", s.frames[frameIndex], s.label)
+				frameIndex = (frameIndex + 1) % len(s.frames)
+
+				select {
+				case <-ticker.C:
+				case <-s.stopCh:
+					fmt.Fprintf(s.writer, "\r%s\r", strings.Repeat(" ", len(s.label)+2))
+					return
+				}
+			}
+		}()
+	})
+}
+
+func (s *spinner) Stop() {
+	s.stopMu.Do(func() {
+		close(s.stopCh)
+		<-s.doneCh
+	})
 }

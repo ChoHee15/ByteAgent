@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	einotool "github.com/cloudwego/eino/components/tool"
 )
 
 func TestResolveWorkdir(t *testing.T) {
@@ -196,4 +199,169 @@ func TestNewBashTool(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCommandNeedsApproval(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name    string
+		command string
+		want    bool
+	}{
+		{name: "read only pwd", command: "pwd", want: false},
+		{name: "read only cat", command: "cat README.md", want: false},
+		{name: "touch file", command: "touch demo.txt", want: true},
+		{name: "redirect output", command: "echo hi > demo.txt", want: true},
+		{name: "mkdir", command: "mkdir -p out", want: true},
+		{name: "git apply", command: "git apply patch.diff", want: true},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := commandNeedsApproval(tc.command)
+			if got != tc.want {
+				t.Fatalf("commandNeedsApproval(%q) = %v, want %v", tc.command, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewBashToolWithApproval(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+
+	t.Run("runs mutating command after approval", func(t *testing.T) {
+		t.Parallel()
+
+		var gotRequest ApprovalRequest
+		bashTool, err := NewBashTool(
+			workspace,
+			time.Second,
+			32*1024,
+			WithWriteApproval(func(_ context.Context, request ApprovalRequest) (bool, error) {
+				gotRequest = request
+				return true, nil
+			}),
+		)
+		if err != nil {
+			t.Fatalf("NewBashTool() error = %v", err)
+		}
+
+		result := invokeBashTool(t, bashTool, BashInput{Command: "touch approved.txt"})
+		if result.ExitCode != 0 {
+			t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+		}
+		if gotRequest.Command != "touch approved.txt" {
+			t.Fatalf("approval command = %q, want %q", gotRequest.Command, "touch approved.txt")
+		}
+		if _, err := os.Stat(filepath.Join(workspace, "approved.txt")); err != nil {
+			t.Fatalf("Stat() error = %v", err)
+		}
+	})
+
+	t.Run("denies mutating command", func(t *testing.T) {
+		t.Parallel()
+
+		bashTool, err := NewBashTool(
+			workspace,
+			time.Second,
+			32*1024,
+			WithWriteApproval(func(context.Context, ApprovalRequest) (bool, error) {
+				return false, nil
+			}),
+		)
+		if err != nil {
+			t.Fatalf("NewBashTool() error = %v", err)
+		}
+
+		_, err = bashTool.InvokableRun(context.Background(), mustMarshalInput(t, BashInput{Command: "touch denied.txt"}))
+		if err == nil || !strings.Contains(err.Error(), "not approved") {
+			t.Fatalf("InvokableRun() error = %v, want not approved error", err)
+		}
+		if _, err := os.Stat(filepath.Join(workspace, "denied.txt")); !os.IsNotExist(err) {
+			t.Fatalf("denied command created file, stat err = %v", err)
+		}
+	})
+
+	t.Run("rejects mutating command without approval support", func(t *testing.T) {
+		t.Parallel()
+
+		bashTool, err := NewBashTool(workspace, time.Second, 32*1024)
+		if err != nil {
+			t.Fatalf("NewBashTool() error = %v", err)
+		}
+
+		_, err = bashTool.InvokableRun(context.Background(), mustMarshalInput(t, BashInput{Command: "touch missing-approval.txt"}))
+		if err == nil || !strings.Contains(err.Error(), "requires interactive approval") {
+			t.Fatalf("InvokableRun() error = %v, want approval error", err)
+		}
+	})
+
+	t.Run("does not ask approval for read only command", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			mu       sync.Mutex
+			called   bool
+			bashTool einotool.InvokableTool
+			err      error
+		)
+		bashTool, err = NewBashTool(
+			workspace,
+			time.Second,
+			32*1024,
+			WithWriteApproval(func(context.Context, ApprovalRequest) (bool, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				called = true
+				return true, nil
+			}),
+		)
+		if err != nil {
+			t.Fatalf("NewBashTool() error = %v", err)
+		}
+
+		result := invokeBashTool(t, bashTool, BashInput{Command: "printf hello"})
+		if strings.TrimSpace(result.Stdout) != "hello" {
+			t.Fatalf("Stdout = %q, want %q", result.Stdout, "hello")
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if called {
+			t.Fatal("approval callback was called for read-only command")
+		}
+	})
+}
+
+func invokeBashTool(t *testing.T, bashTool einotool.InvokableTool, input BashInput) BashOutput {
+	t.Helper()
+
+	result, err := bashTool.InvokableRun(context.Background(), mustMarshalInput(t, input))
+	if err != nil {
+		t.Fatalf("InvokableRun() error = %v", err)
+	}
+
+	var output BashOutput
+	if err := json.Unmarshal([]byte(result), &output); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	return output
+}
+
+func mustMarshalInput(t *testing.T, input BashInput) string {
+	t.Helper()
+
+	arguments, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	return string(arguments)
 }

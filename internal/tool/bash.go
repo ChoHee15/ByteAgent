@@ -14,6 +14,25 @@ import (
 	"github.com/cloudwego/eino/components/tool/utils"
 )
 
+// ApprovalRequest describes a command that requires explicit user approval.
+type ApprovalRequest struct {
+	Command          string
+	WorkingDirectory string
+}
+
+// ApprovalFunc asks whether the command should be allowed to proceed.
+type ApprovalFunc func(context.Context, ApprovalRequest) (bool, error)
+
+type bashToolOptions struct {
+	approvalFunc ApprovalFunc
+}
+
+// BashToolOption customizes bash tool behavior.
+type BashToolOption func(*bashToolOptions)
+
+// ErrWriteNotApproved indicates the user denied a mutating command.
+var ErrWriteNotApproved = errors.New("mutating bash command was not approved")
+
 // BashInput is the shell tool input.
 type BashInput struct {
 	Command          string `json:"command" jsonschema:"description=The bash command to execute,required"`
@@ -32,7 +51,14 @@ type BashOutput struct {
 }
 
 // NewBashTool builds a bash execution tool scoped to the workspace.
-func NewBashTool(workspaceDir string, defaultTimeout time.Duration, maxOutputBytes int) (einotool.InvokableTool, error) {
+func NewBashTool(workspaceDir string, defaultTimeout time.Duration, maxOutputBytes int, opts ...BashToolOption) (einotool.InvokableTool, error) {
+	options := bashToolOptions{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&options)
+		}
+	}
+
 	return utils.InferTool(
 		"bash",
 		"Execute a bash command inside the current workspace and return stdout, stderr, and exit code",
@@ -44,6 +70,23 @@ func NewBashTool(workspaceDir string, defaultTimeout time.Duration, maxOutputByt
 			workdir, err := resolveWorkdir(workspaceDir, input.WorkingDirectory)
 			if err != nil {
 				return nil, err
+			}
+
+			if commandNeedsApproval(input.Command) {
+				if options.approvalFunc == nil {
+					return nil, fmt.Errorf("mutating bash command requires interactive approval: %s", input.Command)
+				}
+
+				approved, err := options.approvalFunc(ctx, ApprovalRequest{
+					Command:          input.Command,
+					WorkingDirectory: workdir,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("request bash approval: %w", err)
+				}
+				if !approved {
+					return nil, ErrWriteNotApproved
+				}
 			}
 
 			timeout := defaultTimeout
@@ -93,6 +136,13 @@ func NewBashTool(workspaceDir string, defaultTimeout time.Duration, maxOutputByt
 	)
 }
 
+// WithWriteApproval requests confirmation before running mutating commands.
+func WithWriteApproval(fn ApprovalFunc) BashToolOption {
+	return func(options *bashToolOptions) {
+		options.approvalFunc = fn
+	}
+}
+
 func resolveWorkdir(workspaceDir, requested string) (string, error) {
 	if strings.TrimSpace(requested) == "" {
 		return workspaceDir, nil
@@ -117,6 +167,31 @@ func resolveWorkdir(workspaceDir, requested string) (string, error) {
 	}
 
 	return candidate, nil
+}
+
+func commandNeedsApproval(command string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(command))
+	if normalized == "" {
+		return false
+	}
+
+	markers := []string{
+		" > ", " >\t", " >> ", " >>\t", ">> ", ">>\t", "tee ", " tee",
+		"rm ", " rm", "mv ", " mv", "cp ", " cp",
+		"touch ", " touch", "mkdir ", " mkdir", "rmdir ", " rmdir",
+		"chmod ", " chmod", "chown ", " chown", "ln ", " ln",
+		"sed -i", "perl -pi", "truncate ", " truncate", "dd ",
+		"git apply", "git commit", "git checkout", "git switch", "git restore",
+		"git clean", "git reset", "patch ", " patch",
+	}
+
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+
+	return false
 }
 
 type limitedBuffer struct {

@@ -3,3 +3,6 @@
 - [x] 为大模型接入增加可选 integration smoke test
 - [x] 统一 `Makefile`、`README.md`、`AGENTS.MD`、`docs/prompts/generate_test.md` 的测试分层说明
 - [x] 增加提交约束：功能验证成功后，需经用户确认再创建 commit，并使用 GitHub 社区常见的提交说明格式
+- [x] 为 CLI 添加运行中加载提示，避免等待模型响应时看起来像卡住
+- [x] 为 code agent 增加写入前确认，拦截 bash 写入/修改命令并要求用户批准
+- [x] 调整写入拒绝语义：交互模式下用户拒绝写入时，仅终止当前 agent 任务并返回提示，不退出整个程序
