@@ -69,3 +69,30 @@ make test-integration
 ```bash
 make test-all
 ```
+
+## GitHub CI/CD
+
+仓库提供两条 GitHub Actions 工作流：
+
+- `CI`
+  - 触发条件：向 `main` 发起 Pull Request
+  - 执行内容：`make test`
+- `Release`
+  - 触发条件：`main` 分支收到新的 push / merge
+  - 执行内容：`make test`、`make test-integration`
+  - 成功后发布 Linux 二进制产物：
+    - `linux/amd64`
+    - `linux/arm64`
+  - 产物会同时上传为 workflow artifact，并作为 GitHub Release asset 发布
+
+在 GitHub 仓库中需要配置以下 Actions secrets：
+
+```bash
+OPENAI_API_KEY=...
+# 可选；未设置时默认使用 gpt-4o-mini
+OPENAI_MODEL=gpt-4o-mini
+# 可选；使用兼容接口时可填写自定义地址
+OPENAI_BASE_URL=
+```
+
+当前本地仓库默认分支仍是 `master`。如果你要让上述工作流按设计自动在 `main` 上触发，需要在 GitHub 上将默认分支切换为 `main`，或先将本地/远端分支重命名为 `main`。

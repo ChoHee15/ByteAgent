@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+    outputs:
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate integration secrets
+        run: |
+          test -n "${OPENAI_API_KEY}" || { echo "OPENAI_API_KEY secret is required"; exit 1; }
+
+      - name: Run unit and local tests
+        run: make test
+
+      - name: Run integration tests
+        run: make test-integration
+
+      - name: Prepare release metadata
+        id: meta
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          echo "release_tag=main-${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "release_name=main-${short_sha}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch:
+          - amd64
+          - arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build release archive
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.verify.outputs.release_tag }}
+          COMMIT: ${{ github.sha }}
+        run: make package
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-agent-linux-${{ matrix.goarch }}
+          path: dist/code-agent-linux-${{ matrix.goarch }}.tar.gz
+
+  publish:
+    needs:
+      - verify
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: code-agent-linux-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.verify.outputs.release_tag }}
+          name: ${{ needs.verify.outputs.release_name }}
+          files: dist/*.tar.gz
+          generate_release_notes: true

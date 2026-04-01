@@ -8,6 +8,11 @@ import (
 	"code_agent/internal/app"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
 func main() {
 	ctx := context.Background()
 
