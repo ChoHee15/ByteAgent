@@ -46,6 +46,7 @@ func TestIntegrationCodeAgentBashChain(t *testing.T) {
 		Model:             modelName,
 		WorkspaceDir:      workspace,
 		MaxHistoryTurns:   4,
+		MaxIterations:     12,
 		MaxCommandBytes:   8 * 1024,
 		CommandTimeoutSec: 20,
 	}
@@ -64,7 +65,7 @@ func TestIntegrationCodeAgentBashChain(t *testing.T) {
 		t.Fatalf("NewBashTool() error = %v", err)
 	}
 
-	codeAgent, err := New(ctx, chatModel, []einotool.BaseTool{bashTool})
+	codeAgent, err := New(ctx, chatModel, []einotool.BaseTool{bashTool}, cfg.MaxIterations)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

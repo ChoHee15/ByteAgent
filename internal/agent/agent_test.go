@@ -13,7 +13,7 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	agent, err := New(context.Background(), fakeToolCallingChatModel{}, []tool.BaseTool{fakeTool{}})
+	agent, err := New(context.Background(), fakeToolCallingChatModel{}, []tool.BaseTool{fakeTool{}}, 16)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

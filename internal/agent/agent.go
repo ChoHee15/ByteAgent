@@ -25,7 +25,11 @@ Safety rules:
 When bash output is relevant, summarize it instead of dumping unnecessary noise.`
 
 // New creates the code agent.
-func New(ctx context.Context, chatModel model.ToolCallingChatModel, tools []tool.BaseTool) (adk.Agent, error) {
+func New(ctx context.Context, chatModel model.ToolCallingChatModel, tools []tool.BaseTool, maxIterations int) (adk.Agent, error) {
+	if maxIterations < 1 {
+		maxIterations = 26
+	}
+
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "code_agent",
 		Description: "A lightweight code agent that can answer questions and execute bash commands in the workspace",
@@ -36,7 +40,7 @@ func New(ctx context.Context, chatModel model.ToolCallingChatModel, tools []tool
 				Tools: tools,
 			},
 		},
-		MaxIterations: 12,
+		MaxIterations: maxIterations,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create chat model agent: %w", err)

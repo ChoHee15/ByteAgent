@@ -12,3 +12,5 @@
 - 扩展发布流程的产物矩阵：在保留 Linux 测试/集成验证的前提下，额外发布 macOS `amd64` / `arm64` 二进制归档。
 - 重构 `README.md`：仅保留项目情况、API 设置、参数、源码启动、release 二进制使用和测试说明；将 GitHub Actions、Secrets 和发布流水线细节迁移到 `docs/github_actions.md`。
 - 优化 GitHub Actions 触发条件：纯文档修改默认不再触发 `CI` 或 `Release`；仅在源码、依赖、`Makefile` 或发布 workflow 相关文件变化时自动运行。
+- 增加 `CODE_AGENT_MAX_ITERATIONS` 环境变量，将 agent 的最大内部迭代轮数从硬编码配置改为可调；同时将 `exceeds max iterations` 底层错误翻译为更清楚的 CLI 提示，指导用户缩小请求范围或调大迭代上限。
+- 将默认 `CODE_AGENT_MAX_ITERATIONS` 从 12 提高到 26，并同步更新 CLI 帮助和 README 示例，降低较大代码库分析任务在默认配置下过早触发迭代上限的概率。

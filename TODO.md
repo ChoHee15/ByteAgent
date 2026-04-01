@@ -10,3 +10,5 @@
 - [x] 为发布流程增加 macOS 二进制产出支持（amd64 / arm64）
 - [x] 重构 README：仅保留项目介绍和使用说明，并将 GitHub Actions / 发布流水线细节迁移到 docs
 - [x] 优化 GitHub Actions 触发条件：纯文档更新默认不触发 CI/Release，仅在代码和构建相关变更时自动运行
+- [x] 增加 `CODE_AGENT_MAX_ITERATIONS` 配置，并将超过迭代上限的底层报错改为更清楚的 CLI 提示
+- [x] 将默认 `CODE_AGENT_MAX_ITERATIONS` 从 12 调整为 26，以降低大规模代码阅读时触发迭代上限的概率

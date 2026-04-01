@@ -15,6 +15,7 @@ func TestLoad(t *testing.T) {
 		wantModel      string
 		wantBaseURL    string
 		wantHistory    int
+		wantIterations int
 		wantCommandMax int
 		wantTimeoutSec int
 	}{
@@ -30,6 +31,7 @@ func TestLoad(t *testing.T) {
 			},
 			wantModel:      defaultModel,
 			wantHistory:    defaultMaxTurns,
+			wantIterations: defaultMaxIterations,
 			wantCommandMax: defaultCommandLimit,
 			wantTimeoutSec: defaultTimeoutSec,
 		},
@@ -40,12 +42,14 @@ func TestLoad(t *testing.T) {
 				"OPENAI_MODEL":                        "deepseek-chat",
 				"OPENAI_BASE_URL":                     "https://api.example.com",
 				"CODE_AGENT_MAX_HISTORY_TURNS":        "bad",
+				"CODE_AGENT_MAX_ITERATIONS":           "0",
 				"CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES": "0",
 				"CODE_AGENT_COMMAND_TIMEOUT_SEC":      "-1",
 			},
 			wantModel:      "deepseek-chat",
 			wantBaseURL:    "https://api.example.com",
 			wantHistory:    defaultMaxTurns,
+			wantIterations: defaultMaxIterations,
 			wantCommandMax: defaultCommandLimit,
 			wantTimeoutSec: defaultTimeoutSec,
 		},
@@ -59,6 +63,7 @@ func TestLoad(t *testing.T) {
 				"OPENAI_MODEL",
 				"OPENAI_BASE_URL",
 				"CODE_AGENT_MAX_HISTORY_TURNS",
+				"CODE_AGENT_MAX_ITERATIONS",
 				"CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES",
 				"CODE_AGENT_COMMAND_TIMEOUT_SEC",
 			} {
@@ -103,6 +108,9 @@ func TestLoad(t *testing.T) {
 			}
 			if cfg.MaxHistoryTurns != tc.wantHistory {
 				t.Fatalf("MaxHistoryTurns = %d, want %d", cfg.MaxHistoryTurns, tc.wantHistory)
+			}
+			if cfg.MaxIterations != tc.wantIterations {
+				t.Fatalf("MaxIterations = %d, want %d", cfg.MaxIterations, tc.wantIterations)
 			}
 			if cfg.MaxCommandBytes != tc.wantCommandMax {
 				t.Fatalf("MaxCommandBytes = %d, want %d", cfg.MaxCommandBytes, tc.wantCommandMax)

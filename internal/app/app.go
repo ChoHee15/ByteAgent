@@ -22,6 +22,8 @@ import (
 	localtool "code_agent/internal/tool"
 )
 
+const defaultMaxIterations = 26
+
 type queryRunner interface {
 	Query(ctx context.Context, query string, opts ...adk.AgentRunOption) *adk.AsyncIterator[*adk.AgentEvent]
 }
@@ -204,7 +206,7 @@ func (a *App) ask(ctx context.Context, prompt string) (string, error) {
 			break
 		}
 		if event.Err != nil {
-			return "", event.Err
+			return "", a.presentableError(event.Err)
 		}
 		msg, _, err := adk.GetMessage(event)
 		if err != nil {
@@ -245,6 +247,7 @@ Environment:
   OPENAI_MODEL                       optional, default gpt-4o-mini
   OPENAI_BASE_URL                    optional
   CODE_AGENT_MAX_HISTORY_TURNS       optional, default 8
+  CODE_AGENT_MAX_ITERATIONS          optional, default 26
   CODE_AGENT_COMMAND_TIMEOUT_SEC     optional, default 120
   CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES optional, default 32768`)
 }
@@ -294,7 +297,7 @@ func (a *App) defaultBootstrap(ctx context.Context) (*config.Config, queryRunner
 		return nil, nil, err
 	}
 
-	codeAgent, err := agent.New(ctx, model, []einotool.BaseTool{bashTool})
+	codeAgent, err := agent.New(ctx, model, []einotool.BaseTool{bashTool}, cfg.MaxIterations)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -412,6 +415,32 @@ func (a *App) handleInteractiveError(err error) bool {
 	}
 
 	return false
+}
+
+func (a *App) presentableError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, localtool.ErrWriteNotApproved) {
+		return err
+	}
+
+	if strings.Contains(strings.ToLower(err.Error()), "exceeds max iterations") {
+		return fmt.Errorf(
+			"task exceeded max iterations (%d); try narrowing the request or increasing CODE_AGENT_MAX_ITERATIONS",
+			a.maxIterationsLimit(),
+		)
+	}
+
+	return err
+}
+
+func (a *App) maxIterationsLimit() int {
+	if a.cfg != nil && a.cfg.MaxIterations > 0 {
+		return a.cfg.MaxIterations
+	}
+
+	return defaultMaxIterations
 }
 
 func (a *App) startProgress() {

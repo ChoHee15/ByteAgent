@@ -107,6 +107,18 @@ func TestAsk(t *testing.T) {
 			wantQueries: []string{"inspect"},
 		},
 		{
+			name: "translates max iteration error",
+			runner: &fakeRunner{
+				events: [][]*adk.AgentEvent{
+					{
+						{Err: errors.New("pre processor fail: exceeds max iterations")},
+					},
+				},
+			},
+			wantErr:     "task exceeded max iterations (21); try narrowing the request or increasing CODE_AGENT_MAX_ITERATIONS",
+			wantQueries: []string{"inspect"},
+		},
+		{
 			name: "errors on empty assistant message",
 			runner: &fakeRunner{
 				events: [][]*adk.AgentEvent{
@@ -125,7 +137,13 @@ func TestAsk(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			application := &App{runner: tc.runner, stdout: &bytes.Buffer{}}
+			application := &App{
+				cfg: &config.Config{
+					MaxIterations: 21,
+				},
+				runner: tc.runner,
+				stdout: &bytes.Buffer{},
+			}
 
 			got, err := application.ask(context.Background(), "inspect")
 			if tc.wantErr != "" {

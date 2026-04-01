@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	defaultModel        = "gpt-4o-mini"
-	defaultMaxTurns     = 8
-	defaultCommandLimit = 32 * 1024
-	defaultTimeoutSec   = 120
+	defaultModel         = "gpt-4o-mini"
+	defaultMaxTurns      = 8
+	defaultMaxIterations = 26
+	defaultCommandLimit  = 32 * 1024
+	defaultTimeoutSec    = 120
 )
 
 // Config holds runtime configuration.
@@ -21,6 +22,7 @@ type Config struct {
 	Model             string
 	WorkspaceDir      string
 	MaxHistoryTurns   int
+	MaxIterations     int
 	MaxCommandBytes   int
 	CommandTimeoutSec int
 }
@@ -43,6 +45,7 @@ func Load() (*Config, error) {
 		Model:             envOrDefault("OPENAI_MODEL", defaultModel),
 		WorkspaceDir:      workspaceDir,
 		MaxHistoryTurns:   envIntOrDefault("CODE_AGENT_MAX_HISTORY_TURNS", defaultMaxTurns),
+		MaxIterations:     envIntOrDefault("CODE_AGENT_MAX_ITERATIONS", defaultMaxIterations),
 		MaxCommandBytes:   envIntOrDefault("CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES", defaultCommandLimit),
 		CommandTimeoutSec: envIntOrDefault("CODE_AGENT_COMMAND_TIMEOUT_SEC", defaultTimeoutSec),
 	}
@@ -53,6 +56,9 @@ func Load() (*Config, error) {
 
 	if cfg.MaxHistoryTurns < 1 {
 		cfg.MaxHistoryTurns = defaultMaxTurns
+	}
+	if cfg.MaxIterations < 1 {
+		cfg.MaxIterations = defaultMaxIterations
 	}
 	if cfg.MaxCommandBytes < 1024 {
 		cfg.MaxCommandBytes = defaultCommandLimit
