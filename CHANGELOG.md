@@ -2,6 +2,9 @@
 
 - 反向沉淀首批 `as-is spec`：为 CLI 入口、交互式 REPL、bash 执行边界、写入确认、运行时配置、agent 错误语义、OpenAI 接入和测试分层补充 `docs/specs/0002` 到 `0009`，统一当前行为基线，并显式记录空输入、EOF、workspace 越界、输出截断、写入拒绝和 integration 跳过等边界情况。
 - 增加顶层 `demos/` 资产目录和 `0010-demo-scenarios` spec：提供“读仓库解释架构”“修复独立 bugfix fixture 并重新跑测试”“触发写入审批”三类可复现场景，并为 bugfix demo 增加与主仓库默认回归隔离的独立 Go module。
+- 增加顶层 `task-suite/` 评测目录和 `0011-task-suite` spec：提供独立工作区模板、验收脚本和三个首批任务，分别覆盖仓库阅读、bugfix+测试，以及按 spec 改代码并补测试的能力验证。
+- 为 `task-suite/` 增加自动 runner：新增 `run-task.sh` 和 `run-all.sh`，自动复制任务工作区、执行 agent、保存 stdout/stderr 与验收日志，并输出机器可读的结果摘要，降低重复人工操作成本。
+- 增加显式 `CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES` 配置：默认仍要求交互式人工批准，但允许在 task-suite 这类非交互自动评测中显式开启自动批准，以避免 mutating 命令被审批流程阻塞。
 
 ## 2026-04-01
 

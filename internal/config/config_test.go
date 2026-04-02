@@ -8,16 +8,17 @@ import (
 
 func TestLoad(t *testing.T) {
 	testCases := []struct {
-		name           string
-		env            map[string]string
-		unset          []string
-		wantErr        string
-		wantModel      string
-		wantBaseURL    string
-		wantHistory    int
-		wantIterations int
-		wantCommandMax int
-		wantTimeoutSec int
+		name            string
+		env             map[string]string
+		unset           []string
+		wantErr         string
+		wantModel       string
+		wantBaseURL     string
+		wantHistory     int
+		wantIterations  int
+		wantCommandMax  int
+		wantTimeoutSec  int
+		wantAutoApprove bool
 	}{
 		{
 			name:    "requires api key",
@@ -38,20 +39,22 @@ func TestLoad(t *testing.T) {
 		{
 			name: "uses explicit values and falls back on invalid ints",
 			env: map[string]string{
-				"OPENAI_API_KEY":                      "test-key",
-				"OPENAI_MODEL":                        "deepseek-chat",
-				"OPENAI_BASE_URL":                     "https://api.example.com",
-				"CODE_AGENT_MAX_HISTORY_TURNS":        "bad",
-				"CODE_AGENT_MAX_ITERATIONS":           "0",
-				"CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES": "0",
-				"CODE_AGENT_COMMAND_TIMEOUT_SEC":      "-1",
+				"OPENAI_API_KEY":                             "test-key",
+				"OPENAI_MODEL":                               "deepseek-chat",
+				"OPENAI_BASE_URL":                            "https://api.example.com",
+				"CODE_AGENT_MAX_HISTORY_TURNS":               "bad",
+				"CODE_AGENT_MAX_ITERATIONS":                  "0",
+				"CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES":        "0",
+				"CODE_AGENT_COMMAND_TIMEOUT_SEC":             "-1",
+				"CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES": "yes",
 			},
-			wantModel:      "deepseek-chat",
-			wantBaseURL:    "https://api.example.com",
-			wantHistory:    defaultMaxTurns,
-			wantIterations: defaultMaxIterations,
-			wantCommandMax: defaultCommandLimit,
-			wantTimeoutSec: defaultTimeoutSec,
+			wantModel:       "deepseek-chat",
+			wantBaseURL:     "https://api.example.com",
+			wantHistory:     defaultMaxTurns,
+			wantIterations:  defaultMaxIterations,
+			wantCommandMax:  defaultCommandLimit,
+			wantTimeoutSec:  defaultTimeoutSec,
+			wantAutoApprove: true,
 		},
 	}
 
@@ -66,6 +69,7 @@ func TestLoad(t *testing.T) {
 				"CODE_AGENT_MAX_ITERATIONS",
 				"CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES",
 				"CODE_AGENT_COMMAND_TIMEOUT_SEC",
+				"CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES",
 			} {
 				t.Setenv(key, "")
 			}
@@ -117,6 +121,9 @@ func TestLoad(t *testing.T) {
 			}
 			if cfg.CommandTimeoutSec != tc.wantTimeoutSec {
 				t.Fatalf("CommandTimeoutSec = %d, want %d", cfg.CommandTimeoutSec, tc.wantTimeoutSec)
+			}
+			if cfg.UnsafeAutoApproveBash != tc.wantAutoApprove {
+				t.Fatalf("UnsafeAutoApproveBash = %v, want %v", cfg.UnsafeAutoApproveBash, tc.wantAutoApprove)
 			}
 		})
 	}

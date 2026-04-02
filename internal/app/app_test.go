@@ -393,6 +393,33 @@ func TestConfirmMutatingCommandWithLineEditor(t *testing.T) {
 	}
 }
 
+func TestConfirmMutatingCommandUnsafeAutoApprove(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	application := &App{
+		cfg: &config.Config{
+			UnsafeAutoApproveBash: true,
+		},
+		stdin:  newInputFile(t, ""),
+		stdout: &output,
+	}
+
+	approved, err := application.confirmMutatingCommand(context.Background(), localtool.ApprovalRequest{
+		Command:          "touch demo.txt",
+		WorkingDirectory: "/tmp/workspace",
+	})
+	if err != nil {
+		t.Fatalf("confirmMutatingCommand() error = %v", err)
+	}
+	if !approved {
+		t.Fatal("confirmMutatingCommand() = false, want true")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("confirmMutatingCommand() wrote unexpected output: %q", output.String())
+	}
+}
+
 func TestHandleInteractiveError(t *testing.T) {
 	t.Parallel()
 

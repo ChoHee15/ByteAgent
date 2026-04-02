@@ -57,6 +57,7 @@ export CODE_AGENT_MAX_HISTORY_TURNS=8
 export CODE_AGENT_MAX_ITERATIONS=26
 export CODE_AGENT_COMMAND_TIMEOUT_SEC=120
 export CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES=32768
+export CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES=
 ```
 
 说明：
@@ -65,6 +66,7 @@ export CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES=32768
 - `CODE_AGENT_MAX_ITERATIONS`：单次 agent 任务允许的最大内部推理/工具调用轮数
 - `CODE_AGENT_COMMAND_TIMEOUT_SEC`：单条 `bash` 命令超时时间
 - `CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES`：单条 `bash` 输出的最大保留字节数
+- `CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES`：显式开启后，在非交互模式下自动批准 mutating bash 命令；默认关闭，仅建议用于自动化评测
 
 交互说明：
 
@@ -109,6 +111,23 @@ go build -o ./dist/code-agent ./cmd/code-agent
 - 请求执行 mutating 命令时触发审批
 
 入口文档见 [`demos/README.md`](demos/README.md)。
+
+## Task Suite
+
+除了人工演示用的 `demos/`，仓库还提供了顶层 `task-suite/` 用于可重复执行、可脚本验证的 agent coding tasks。
+
+首批任务覆盖：
+
+- 读小型仓库并生成架构说明
+- 先跑测试再修复一个小 bug
+- 先读 spec 再实现状态别名并补测试
+
+并提供：
+
+- `run-task.sh`：自动执行单个任务
+- `run-all.sh`：批量执行全部任务并汇总结果
+
+入口文档见 [`task-suite/README.md`](task-suite/README.md)。
 
 ## Release 二进制使用
 

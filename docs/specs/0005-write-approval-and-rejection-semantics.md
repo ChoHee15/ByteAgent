@@ -31,9 +31,11 @@
 ## Edge Cases
 
 - 若当前 stdin/stdout 不是交互终端，则默认无法进行写入审批，命令会被拒绝并返回交互终端相关错误。
+- 若显式设置 `CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES`，则 CLI 会跳过交互确认，自动批准 mutating bash 命令。
 - 在交互模式下，如果写入未获批准，当前 agent 任务被取消，并向用户输出“当前任务已取消”的提示；REPL 本身继续运行。
 - 在单次命令模式下，如果写入未获批准，则将错误返回给上层，CLI 以失败结束。
 - 启发式识别并不完整；当前 spec 固定的是“已有 marker 列表”，不是“所有真实写入都能被识别”。
+- 自动批准模式是显式 `unsafe` 逃生阀，主要用于自动化评测；默认行为仍是要求人工确认。
 
 ## Acceptance Criteria
 

@@ -26,6 +26,7 @@
 - `CODE_AGENT_MAX_ITERATIONS` 默认值为 `26`。
 - `CODE_AGENT_COMMAND_TIMEOUT_SEC` 默认值为 `120`。
 - `CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES` 默认值为 `32768`。
+- `CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES` 默认关闭；仅当环境变量值为 `1`、`true`、`yes`、`y` 或 `on` 时开启。
 - 对于整数环境变量，若值为空或无法解析为整数，则直接使用默认值。
 - 对于已经解析成功但不合法的整数值，系统执行二次兜底：
   - `MaxHistoryTurns < 1` 时回退到 `8`
@@ -38,6 +39,7 @@
 - `OPENAI_BASE_URL` 为空并不报错，表示直接使用默认 OpenAI 端点。
 - 即使设置了 `CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES=0`，最终也会回退到默认值，而不是允许无限输出。
 - `WorkspaceDir` 基于进程启动时的当前目录；当前没有额外配置项允许用户覆盖它。
+- `CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES` 不是安全默认值；空值、拼写错误或其他未识别值都会被视为关闭。
 
 ## Acceptance Criteria
 
@@ -45,6 +47,7 @@
 - [x] 未设置可选环境变量时使用默认值
 - [x] 非法整数配置回退到默认值
 - [x] `WorkspaceDir` 总是被解析为绝对路径
+- [x] `CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES` 仅在显式真值时开启
 
 ## Test Plan
 

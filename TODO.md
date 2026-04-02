@@ -16,3 +16,6 @@
 - [x] 将项目升级为轻量 spec-driven 流程，并提供一套可复用的 spec coding 模板
 - [x] 将现有 CLI、REPL、bash、配置和测试分层等核心行为反向沉淀为首批 as-is specs
 - [x] 补充一组可复现 demo，覆盖读 repo、修小 bug 跑测试和写入审批
+- [x] 增加顶层 task suite，提供可验证的仓库阅读、bugfix 和 spec-driven coding 任务
+- [x] 为 task suite 增加自动 runner，支持单任务和批量执行、日志保存与结果汇总
+- [x] 为自动 task suite 增加显式 unsafe 自动写入批准开关，避免非交互评测被审批阻塞

@@ -266,7 +266,8 @@ Environment:
   CODE_AGENT_MAX_HISTORY_TURNS       optional, default 8
   CODE_AGENT_MAX_ITERATIONS          optional, default 26
   CODE_AGENT_COMMAND_TIMEOUT_SEC     optional, default 120
-  CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES optional, default 32768`)
+  CODE_AGENT_MAX_COMMAND_OUTPUT_BYTES optional, default 32768
+  CODE_AGENT_UNSAFE_AUTO_APPROVE_BASH_WRITES optional, default off`)
 }
 
 type turn struct {
@@ -499,6 +500,10 @@ func (a *App) confirmMutatingCommand(ctx context.Context, request localtool.Appr
 
 	resume := a.pauseProgress()
 	defer a.resumeProgress(resume)
+
+	if a.cfg != nil && a.cfg.UnsafeAutoApproveBash {
+		return true, nil
+	}
 
 	if !a.canPromptForApproval() {
 		return false, fmt.Errorf("mutating bash commands require confirmation from an interactive terminal")
