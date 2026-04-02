@@ -2,11 +2,14 @@
 
 `code-agent` 是一个基于 Go 和 [CloudWeGo Eino](https://github.com/cloudwego/eino) 的命令行 code agent。它支持单次提问和交互式 REPL，并可通过大模型调用本地 `bash` 工具完成查询或代码修改。
 
+项目现在采用轻量 spec-driven 工作流。规格文档和模板见 [`docs/specs/README.md`](docs/specs/README.md) 与 [`docs/specs/TEMPLATE.md`](docs/specs/TEMPLATE.md)。
+
 ## ???
 
 面试后尝试构建该项目，完成了基础功能。使用deepseek-chat进行了测试，可以完成代码编写、阅读查错。大规模代码未经过测试。
 该cli工具对其所处当前目录有效。可以使用release下的二进制包。
 进度记录于 [TODO.md](TODO.md) 和 [CHANGELOG.md](CHANGELOG.md) 下。
+原型开发趋于稳定后，引入轻量spec流程。
 
 
 ## 项目情况

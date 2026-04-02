@@ -15,3 +15,4 @@
 - 增加 `CODE_AGENT_MAX_ITERATIONS` 环境变量，将 agent 的最大内部迭代轮数从硬编码配置改为可调；同时将 `exceeds max iterations` 底层错误翻译为更清楚的 CLI 提示，指导用户缩小请求范围或调大迭代上限。
 - 将默认 `CODE_AGENT_MAX_ITERATIONS` 从 12 提高到 26，并同步更新 CLI 帮助和 README 示例，降低较大代码库分析任务在默认配置下过早触发迭代上限的概率。
 - 将交互式 REPL 的输入层切换到 `readline`，改善中文输入、退格和行编辑体验；同时为 REPL 和写入确认流程引入可注入的 line editor 抽象，以保持自动化测试可控。
+- 将项目升级为轻量 spec-driven 工作流：新增 `docs/specs/` 目录、spec 模板和示例 spec，并在 `AGENTS.MD` 中要求功能实现前先补充轻量规格，再按 spec 编写代码与测试。

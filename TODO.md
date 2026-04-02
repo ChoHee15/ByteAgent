@@ -13,3 +13,4 @@
 - [x] 增加 `CODE_AGENT_MAX_ITERATIONS` 配置，并将超过迭代上限的底层报错改为更清楚的 CLI 提示
 - [x] 将默认 `CODE_AGENT_MAX_ITERATIONS` 从 12 调整为 26，以降低大规模代码阅读时触发迭代上限的概率
 - [x] 将交互式 REPL 输入层切换为 `readline`，改善中文输入和退格体验，并适配对应测试
+- [x] 将项目升级为轻量 spec-driven 流程，并提供一套可复用的 spec coding 模板
