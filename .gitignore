@@ -1,5 +1,6 @@
 .env
 /bin/
 /code-agent
+/demos/code-agent
 /dist/
 /playground/
