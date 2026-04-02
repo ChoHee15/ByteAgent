@@ -1,6 +1,7 @@
 ## 2026-04-02
 
 - 反向沉淀首批 `as-is spec`：为 CLI 入口、交互式 REPL、bash 执行边界、写入确认、运行时配置、agent 错误语义、OpenAI 接入和测试分层补充 `docs/specs/0002` 到 `0009`，统一当前行为基线，并显式记录空输入、EOF、workspace 越界、输出截断、写入拒绝和 integration 跳过等边界情况。
+- 增加顶层 `demos/` 资产目录和 `0010-demo-scenarios` spec：提供“读仓库解释架构”“修复独立 bugfix fixture 并重新跑测试”“触发写入审批”三类可复现场景，并为 bugfix demo 增加与主仓库默认回归隔离的独立 Go module。
 
 ## 2026-04-01
 

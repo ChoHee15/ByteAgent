@@ -15,3 +15,4 @@
 - [x] 将交互式 REPL 输入层切换为 `readline`，改善中文输入和退格体验，并适配对应测试
 - [x] 将项目升级为轻量 spec-driven 流程，并提供一套可复用的 spec coding 模板
 - [x] 将现有 CLI、REPL、bash、配置和测试分层等核心行为反向沉淀为首批 as-is specs
+- [x] 补充一组可复现 demo，覆盖读 repo、修小 bug 跑测试和写入审批

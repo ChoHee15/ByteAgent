@@ -100,6 +100,16 @@ go build -o ./dist/code-agent ./cmd/code-agent
 ./dist/code-agent -i
 ```
 
+## Demo 场景
+
+仓库提供了一组可复现 demo，用来验证 agent 的核心能力：
+
+- 读 repo 并解释架构
+- 修一个小 bug 并跑测试
+- 请求执行 mutating 命令时触发审批
+
+入口文档见 [`demos/README.md`](demos/README.md)。
+
 ## Release 二进制使用
 
 仓库发布产物为压缩包，当前包含：
