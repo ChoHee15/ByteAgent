@@ -1,3 +1,7 @@
+## 2026-04-02
+
+- 反向沉淀首批 `as-is spec`：为 CLI 入口、交互式 REPL、bash 执行边界、写入确认、运行时配置、agent 错误语义、OpenAI 接入和测试分层补充 `docs/specs/0002` 到 `0009`，统一当前行为基线，并显式记录空输入、EOF、workspace 越界、输出截断、写入拒绝和 integration 跳过等边界情况。
+
 ## 2026-04-01
 
 - 增加分层测试策略：默认通过 `make test` 运行 mock/local tests，通过 `make test-integration` 运行真实大模型 smoke test。
